@@ -1,9 +1,9 @@
 name: Update Events
 
 on:
-  workflow_dispatch:          # 驗證階段：只用手動觸發
-  # schedule:                 # 驗證通過後，把下面兩行前面的 # 拿掉
-  #   - cron: "0 21 * * *"    # 每日 06:00 JST
+  workflow_dispatch:
+  schedule:
+    - cron: "0 21 * * *"    # 每日 06:00 JST
 
 permissions:
   models: read                # 只給備援 AI 這一項權限，其餘一律不給
