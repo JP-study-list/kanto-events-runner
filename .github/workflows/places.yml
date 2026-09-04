@@ -32,8 +32,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     # 每筆 = Jina 抓頁（最慢 90 秒 × 3 次重試）＋ 一次 LLM ＋ 8 秒間隔。
-    # 30 筆順利時約 10 分鐘，全部踩到重試才會逼近上限。
-    timeout-minutes: 60
+    # ⚠️⚠️ **實測每筆 26.2 秒**（2026-08-21 那輪 85 筆跑了 37 分 5 秒），
+    # 而景點已經 459 筆——2026-09-04 那班 schedule 就是這樣跑滿 60 分鐘被砍的。
+    # 真正的解法是 build_places.py 的分批（單位 あ-1），這裡只是**後備的閘**：
+    # 程式自己的 HOURS_BUDGET_SEC（4 小時）會先收工，走到這個閘代表出事了。
+    # ⚠️ 這是 job 層的閘，**被它砍掉是灰色的 `cancelled` 不是紅色的 `failure`**
+    # ＝不會有任何通知（2026-09-04 就是這樣沒有人發現）。所以真正負責「變紅」的是
+    # 下面「產生景點資料」那一步自己的 timeout-minutes，它刻意比這個短一截。
+    timeout-minutes: 300
     steps:
       - name: 取出私有 repo 的程式碼
         uses: actions/checkout@v4
@@ -47,6 +53,10 @@ jobs:
 
       - name: 產生景點資料（完整輸出寫進 places_run.log，不進公開紀錄）
         id: build
+        # ⚠️ **步驟層的閘，比 job 的 300 短一截，這是刻意的。**
+        # 步驟逾時算 failure（紅的、會通知），job 逾時算 cancelled（灰的、不會）。
+        # 留 30 分鐘給後面的座標查詢與寫檔。
+        timeout-minutes: 270
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           JINA_API_KEY:   ${{ secrets.JINA_API_KEY }}
@@ -83,7 +93,18 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # 逐項指定，不用 git add -A：repo 根目錄就是網站根目錄（地雷 #14）。
-          git add places.json places_src/_geocache.json places_run.log
+          git add places.json places_src/_geocache.json
+          # ⚠️⚠️ **log 是空的就不要 commit 它。**
+          # 產生那一步被砍掉時，`> places_run.log` 已經先把檔案清成 0 bytes，
+          # 而這一步是 `if: always()`——2026-09-04 就這樣把上一份成功的 256 行紀錄
+          # 覆蓋掉了，而那是**唯一逐筆列出「這次抓到什麼營業時間」的地方**。
+          # 保住舊的比留一個空檔有用：失敗的原因在 Actions 的執行紀錄裡看得到。
+          if [ -s places_run.log ]; then
+            git add places_run.log
+          else
+            echo "⚠️ places_run.log 是空的（產生那步多半被砍了）——不 commit 它，保住上一份紀錄"
+            git checkout -- places_run.log || true
+          fi
           if git diff --cached --quiet; then
             echo "無異動（管線的產出是決定性的，沒變就不推）"
             exit 0
