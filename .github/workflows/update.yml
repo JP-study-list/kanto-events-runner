@@ -8,6 +8,17 @@ on:
 permissions:
   models: read                # 只給備援 AI 這一項權限，其餘一律不給
 
+# 三支都推同一個私有 repo 的 main，撞車時沒有任何警訊。
+# ⚠️⚠️ **這支以前沒掛，是因為它以前碰不到另外兩支**：景點那輪只跑 37 分鐘
+# （19:30 → 20:07 UTC），21:00 這班一定在它之後。**2026-09-04 的單位 あ-1 把景點的
+# 時間預算設成 4 小時之後，那個前提就沒了**——景點會跑到 23:30 UTC，
+# 與這支重疊兩個多小時。（2026-09-09，單位 あ-2 查證時補上。）
+# ⚠️ `cancel-in-progress: false` 不可改成 true：那會讓後到的把正在跑的砍掉，
+# 而被砍的那一輪什麼都寫不出來（同 places.yml 那個 cancelled 是灰色的、不通知）。
+concurrency:
+  group: kanto-events-push
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
